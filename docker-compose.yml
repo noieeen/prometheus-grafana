@@ -1,0 +1,64 @@
+version: "3.8"
+
+networks:
+  monitoring_network:
+
+services:
+  # # External Node.js container (assuming it exposes metrics on port 8080)
+  # node-app-external:
+  #   image: your-nodejs-image:latest
+  #   networks:
+  #     - monitoring_network
+  #   # Modify other configurations specific to your app
+
+  # node-exporter:
+  #   image: quay.io/prometheus/node-exporter:latest
+  #   networks:
+  #     - monitoring_network
+  #   volumes:
+  #     - /proc:/host/proc:ro
+  #     - /sys:/host/sys:ro
+  #   command:
+  #     - "--path.rootfs=/host"
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    command:
+      - "--path.rootfs=/host"
+    # network_mode: host
+
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - "/:/host:ro,rslave"
+    networks:
+      - monitoring_network
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+      # - "9090:9090/tcp" # Optional for Prometheus scraping itself
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml # Your Prometheus config
+    networks:
+      - monitoring_network
+    depends_on:
+      - node_exporter
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_BASIC_ENABLED=false
+    volumes:
+      - ./grafana.dashboards:/etc/grafana/dashboards # Your Node.js dashboard JSON
+    networks:
+      - monitoring_network
+    depends_on:
+      - prometheus
